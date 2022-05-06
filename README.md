@@ -1,4 +1,16 @@
-# kmerhash-sc2018-results
+# Kmerind Results
+
+## List of updated scripts
+
+* *run/fig4/benchmark_multithread_vary_k.sh*
+
+## Modifications
+
+Some modifications to the original scripts were made to make sure that it can run the new kmerind repo on our hardware(c220g2 on Cloudlab):
+
+* Map by socket: the original scripts use `--map-by ppr:${cpu_node_cores}:socket`, where `cpu_node_cores=$((num_threads / 4))`. I think that `4` means the number of sockets on their systems. 
+
+## Original README
 
 This repository is the companion to the "kmerhash" repository, and contains supporting information for the SC18 paper titled "Optimizing High Performance Distributed Memory Parallel Hash Tables with Application to DNA $k$-mer Counting".
 
