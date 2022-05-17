@@ -19,15 +19,13 @@
 
 ROOTDIR=./out/
 
-DATA_DIR=~/memfs
+DATA_DIR=~/kmerind/dataset
 LOCALTMP=${ROOTDIR}/tmp
 OUT_DIR=${ROOTDIR}/tmp
 
 DATE=`date +%Y%m%d-%H%M%S`
 logdir=${ROOTDIR}/log
 mkdir -p ${logdir}/kmerind
-
-cd ${logdir}
 
 TIME_CMD="/usr/bin/time -v"
 CACHE_CLEAR_CMD="free && sync && echo 3 > /proc/sys/vm/drop_caches && free"
@@ -64,6 +62,7 @@ unset OMP_NUM_THREADS
 
 #=========== kmerind
 
+#set -euo pipefail
 
 #drop cache
 #eval "sudo /usr/local/crashplan/bin/CrashPlanEngine stop"
@@ -71,21 +70,21 @@ unset OMP_NUM_THREADS
 
 #warm up
 EXEC=${KMERIND_BIN_DIR}/testKmerIndex-FASTQ-a4-k31-SINGLE-DENSEHASH-COUNT-dtIDEN-dhFARM-shFARM
-echo "$MPIRUN_CMD -np 64 --map-by ppr:32:socket --rank-by core --bind-to core $EXEC -F ${datafile}" > ${logdir}/kmerind_uncached.log
-eval "$MPIRUN_CMD -np 64 --map-by ppr:32:socket --rank-by core --bind-to core $EXEC -F ${datafile} >> ${logdir}/kmerind_uncached.log 2>&1"
+echo "$MPIRUN_CMD --use-hwthread-cpus -np 64 --map-by ppr:32:socket --rank-by core --bind-to core $EXEC -F ${datafile}" > ${logdir}/kmerind_uncached.log
+eval "$MPIRUN_CMD --use-hwthread-cpus -np 64 --map-by ppr:32:socket --rank-by core --bind-to core $EXEC -F ${datafile} >> ${logdir}/kmerind_uncached.log 2>&1"
 
-rm ${LOCALTMP}/test.out*
+rm -f ${LOCALTMP}/test.out*
 
 NUM_SOCKETS=$(grep physical.id /proc/cpuinfo | sort -u | wc -l)
 
 echo "number of sockets " $NUM_SOCKETS
 
-disttrans=IDENT
+disttrans=IDEN
 # FARM is the fastest hash per fig 7
 disthash=FARM
 storehash=FARM
 
-for t in 64 32 16 8
+for t in 64
 do
 
   cpu_node_cores=$((t / $NUM_SOCKETS))
@@ -98,7 +97,7 @@ do
     do
 
 
-      for map in DENSEHASH SORTED UNORDERED
+      for map in DENSEHASH
       do
         
 
@@ -116,7 +115,7 @@ do
           then
           
             # command to execute
-            cmd="$MPIRUN_CMD -np ${t} --map-by ppr:${cpu_node_cores}:socket --rank-by core --bind-to core $EXEC -F ${datafile}"
+            cmd="$MPIRUN_CMD --use-hwthread-cpus -np ${t} --map-by ppr:${cpu_node_cores}:socket --rank-by core --bind-to core $EXEC -F ${datafile}"
             echo "COMMAND" > $logfile
             echo $cmd >> $logfile
             echo "COMMAND: ${cmd}" 
