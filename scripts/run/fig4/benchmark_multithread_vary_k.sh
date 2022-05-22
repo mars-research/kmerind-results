@@ -69,7 +69,8 @@ unset OMP_NUM_THREADS
 #eval "/usr/local/sbin/drop_caches"
 
 #warm up
-EXEC=${KMERIND_BIN_DIR}/testKmerIndex-FASTQ-a4-k31-SINGLE-DENSEHASH-COUNT-dtIDEN-dhFARM-shFARM
+#EXEC=${KMERIND_BIN_DIR}/testKmerIndex-FASTQ-a4-k31-SINGLE-DENSEHASH-COUNT-dtIDEN-dhFARM-shFARM
+EXEC=${KMERIND_BIN_DIR}/testKmerIndex-FASTQ-a4-k31-CANONICAL-DENSEHASH-COUNT-dtIDEN-dhFARM-shFARM
 echo "$MPIRUN_CMD --use-hwthread-cpus -np 64 --map-by ppr:32:socket --rank-by core --bind-to core $EXEC -F ${datafile}" > ${logdir}/kmerind_uncached.log
 eval "$MPIRUN_CMD --use-hwthread-cpus -np 64 --map-by ppr:32:socket --rank-by core --bind-to core $EXEC -F ${datafile} >> ${logdir}/kmerind_uncached.log 2>&1"
 
@@ -103,7 +104,10 @@ do
 
 
         # kmerind
-        for EXEC in ${KMERIND_BIN_DIR}/testKmerIndex-FASTQ-a4-k${K}-SINGLE-${map}-COUNT-dt${disttrans}-dh${storehash}-sh${storehash}
+        #for EXEC in ${KMERIND_BIN_DIR}/testKmerIndex-FASTQ-a4-k${K}-SINGLE-${map}-COUNT-dt${disttrans}-dh${storehash}-sh${storehash}
+
+	# kmerhash
+        for EXEC in ${KMERIND_BIN_DIR}/testKmerIndex-FASTQ-a4-k${K}-CANONICAL-${map}-COUNT-dt${disttrans}-dh${storehash}-sh${storehash}
         do 
 
           exec_name=$(basename ${EXEC})

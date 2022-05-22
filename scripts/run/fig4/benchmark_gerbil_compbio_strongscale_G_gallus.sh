@@ -17,53 +17,48 @@
 
 # Set the number of threads per task(Default=1)
 
-ROOTDIR=CHANGE_ME
+ROOTDIR=./out/
 
-
-
-
-module load binutils-2.26 gcc-5.3.0 openmpi-1.10.2 boost-1.61.0
-
-which mpirun
-
-DATA_DIR=${ROOTDIR}/data
+DATA_DIR=~/dataset
 LOCALTMP=${ROOTDIR}/tmp
 OUT_DIR=${ROOTDIR}/tmp
 
 DATE=`date +%Y%m%d-%H%M%S`
 logdir=${ROOTDIR}/data/compbio-gerbil-strongscale-G_gallus
+mkdir -p ${LOCALTMP}
 mkdir -p ${logdir}/gerbil
 mkdir -p ${logdir}/kmc3
 mkdir -p ${logdir}/kmerind
 
-cd ${logdir}
+mkdir -p $logdir
 
 TIME_CMD="/usr/bin/time -v"
 CACHE_CLEAR_CMD="free && sync && echo 3 > /proc/sys/vm/drop_caches && free"
-MPIRUN_CMD="/usr/local/modules/openmpi/1.10.2/bin/mpirun"
+MPIRUN_CMD="mpirun"
 
 
 /usr/bin/numactl -H
 
 ##================= now execute.
 
-echo "CACHE CLEARING VERSION"
-echo "Nodes:  ORIG ${SLURM_NODELIST}"
-echo "NNodes:  ORIG ${SLURM_NNODES}"
-echo "T/Nodes:  ORIG ${SLURM_TASKS_PER_NODE}"
-echo "NT/Node:  ORIG ${SLURM_NTASKS_PER_NODE}"
-echo "TASKS:  ORIG ${SLURM_NTASKS}"
+#echo "CACHE CLEARING VERSION"
+#echo "Nodes:  ORIG ${SLURM_NODELIST}"
+#echo "NNodes:  ORIG ${SLURM_NNODES}"
+#echo "T/Nodes:  ORIG ${SLURM_TASKS_PER_NODE}"
+#echo "NT/Node:  ORIG ${SLURM_NTASKS_PER_NODE}"
+#echo "TASKS:  ORIG ${SLURM_NTASKS}"
 
 
 GERBIL_EXEC=${ROOTDIR}/build/gerbil/gerbil
-KMERIND_BIN_DIR=${ROOTDIR}/build/kmerhash/bin
+KMERIND_BIN_DIR=./build/bin
 KMC_EXEC=${ROOTDIR}/build/kmc3/kmc
 
 
 ## ================= dataset.
 
-dataset=G_gallus
-datafile=${DATA_DIR}/${dataset}/${dataset}.fastq
+dataset=SRR077487.2
+#dataset=SRR072006
+datafile=${DATA_DIR}/${dataset}.fastq
 
 
 #unset any OMP or numa stuff.
@@ -82,10 +77,10 @@ unset OMP_NUM_THREADS
 
 #warm up
 EXEC=${KMERIND_BIN_DIR}/testKmerCounter-FASTQ-a4-k31-CANONICAL-DENSEHASH-COUNT-dtIDEN-dhFARM-shFARM
-echo "$MPIRUN_CMD -np 64 --map-by ppr:16:socket --rank-by core --bind-to core $EXEC -O ${LOCALTMP}/test.out ${datafile}" > ${logdir}/kmerind_uncached.log
-eval "$MPIRUN_CMD -np 64 --map-by ppr:16:socket --rank-by core --bind-to core $EXEC -O ${LOCALTMP}/test.out ${datafile} >> ${logdir}/kmerind_uncached.log 2>&1"
+echo "$MPIRUN_CMD --use-hwthread-cpus -np 64 --map-by ppr:32:socket --rank-by core --bind-to core $EXEC -O ${LOCALTMP}/test.out ${datafile}" > ${logdir}/kmerind_uncached.log
+eval "$MPIRUN_CMD --use-hwthread-cpus -np 64 --map-by ppr:32:socket --rank-by core --bind-to core $EXEC -O ${LOCALTMP}/test.out ${datafile} >> ${logdir}/kmerind_uncached.log 2>&1"
 
-rm ${LOCALTMP}/test.out*
+rm -f ${LOCALTMP}/test.out*
 
 
 
@@ -93,7 +88,7 @@ rm ${LOCALTMP}/test.out*
 for t in 64 32 16 8
 do
 
-  cpu_node_cores=$((t / 4))
+  cpu_node_cores=$((t / 2))
 
   for iter in 1 2 3
   do
@@ -123,7 +118,7 @@ do
           then
           
             # command to execute
-            cmd="$MPIRUN_CMD -np ${t} --map-by ppr:${cpu_node_cores}:socket --rank-by core --bind-to core $EXEC -O $outfile -B 6 ${datafile}"
+            cmd="$MPIRUN_CMD --use-hwthread-cpus -np ${t} --map-by ppr:${cpu_node_cores}:socket --rank-by core --bind-to core $EXEC -O $outfile -B 6 ${datafile}"
             echo "COMMAND" > $logfile
             echo $cmd >> $logfile
             echo "COMMAND: ${cmd}" 
@@ -201,158 +196,3 @@ do
 
 done
 #t
-
-
-
-
-#=========== gerbil
-
-
-#drop cache
-#eval "sudo /usr/local/crashplan/bin/CrashPlanEngine stop"
-#eval "/usr/local/sbin/drop_caches"
-
-#warmup
-echo "/usr/bin/numactl -C 0-15,18-33,36-51,54-69 ${GERBIL_EXEC} -i -k 27 -e 512GB -t 64 -l 1 ${datafile} $LOCALTMP ${LOCALTMP}/test.out" > ${logdir}/gerbil_uncached.log
-eval "/usr/bin/numactl -C 0-15,18-33,36-51,54-69 ${GERBIL_EXEC} -i -k 27 -e 512GB -t 64 -l 1 ${datafile} $LOCALTMP ${LOCALTMP}/test.out >> ${logdir}/gerbil_uncached.log 2>&1"
- 
-rm ${LOCALTMP}/test.out*
-
-for t in 64 32 16 8
-do
-
-  cpu_max_1=$(((t / 4) - 1))
-  cpu_max_2=$((18 + (t / 4) - 1))
-  cpu_max_3=$((36 + (t / 4) - 1))
-  cpu_max_4=$((54 + (t / 4) - 1))
-  cpu_node_cores=$((t / 4))
-
-  export GOMP_CPU_AFFINITY=0-${cpu_max_1},18-${cpu_max_2},36-${cpu_max_3},54-${cpu_max_4}
-  NUMA_CMD="/usr/bin/numactl -C ${GOMP_CPU_AFFINITY}"
-  echo $NUMA_CMD
-
-  #IF get error about numa affinity, then make sure the number of tasks (-n) for slurm is set to sufficiently large number.
-  echo "TEST NUMA"
-  /usr/bin/numactl --physcpubind=${GOMP_CPU_AFFINITY} hostname
-  echo "TEST NUMA DONE"
-
-
-  for iter in 1 2 3
-  do
-
-    for K in 15 21 31 63
-    do
-
-
-      # gerbil
-
-      outfile=${OUT_DIR}/gerbil-CANONICAL-k${K}-t${t}-${dataset}.$iter.out
-      # canonical
-      logfile=${logdir}/gerbil/gerbil-CANONICAL-k${K}-t${t}-${dataset}.$iter.log
-    
-      if [ ! -f $logfile ] || [ "$(tail -1 $logfile)" != "COMPLETED" ]
-      then
-      
-        cmd="${NUMA_CMD} ${GERBIL_EXEC} -i -k ${K} -e 512GB -t ${t} -l 1 ${datafile} $LOCALTMP $outfile"
-        echo "COMMAND (CANONICAL): ${cmd}" 
-        echo "LOGFILE: ${logfile}"
-        echo "$cmd" > $logfile
-        
-        # eval "$CACHE_CLEAR_CMD >> $logfile 2>&1"
-        eval "($TIME_CMD $cmd >> $logfile 2>&1) >> $logfile 2>&1"		  
-        echo "COMPLETED" >> $logfile 
-      
-        rm ${outfile}*
-      else
-        echo "$logfile exists and COMPLETED.  skipping."
-      fi
-
-    done
-    #K
-
-  done
-  #iter
-
-
-done
-#t
-
-
-
-#========= KMC3
-
-#UNSET some OMP envars. this is absolutely necessary to spread the computation out to cores.
-export OMP_PROC_BIND=false
-unset OMP_PLACES
-# as soon as OMP_PROC_BIND is enabled, we either get all threads on 1 core, or all threads on 1 socket.
-# specifying OMP_PLACES as can allow all threads on 1 socket, but unable to get to all sockets.
-#export OMP_PLACES="{0:$cpu_node_cores},{18:$cpu_node_cores},{36:$cpu_node_cores},{54:$cpu_node_cores}"
-# specifying cores gets all threads to 1 core, not even to 1 socket.
-#export OMP_PLACES="cores($t)"
-
-#eval "sudo /usr/local/crashplan/bin/CrashPlanEngine stop"
-#eval "/usr/local/sbin/drop_caches"
-
-#warmup
-echo "/usr/bin/numactl -C 0-15,18-33,36-51,54-69 ${KMC_EXEC} -v -k27 -m512 -fq -ci1 -cs1000000000 -r -t64 ${datafile} ${LOCALTMP}/test.out ${OUT_DIR}" > ${logdir}/kmc3_uncached.log
-eval "/usr/bin/numactl -C 0-15,18-33,36-51,54-69 ${KMC_EXEC} -v -k27 -m512 -fq -ci1 -cs1000000000 -r -t64 ${datafile} ${LOCALTMP}/test.out ${OUT_DIR} >> ${logdir}/kmc3_uncached.log 2>&1"
-
-rm ${LOCALTMP}/test.out*
-
-for t in 64 32 16 8
-do
-
-  cpu_max_1=$(((t / 4) - 1))
-  cpu_max_2=$((18 + (t / 4) - 1))
-  cpu_max_3=$((36 + (t / 4) - 1))
-  cpu_max_4=$((54 + (t / 4) - 1))
-  cpu_node_cores=$((t / 4))
-
-  export GOMP_CPU_AFFINITY=0-${cpu_max_1},18-${cpu_max_2},36-${cpu_max_3},54-${cpu_max_4}
-  NUMA_CMD="/usr/bin/numactl -C ${GOMP_CPU_AFFINITY}"
-  echo $NUMA_CMD
-
-  export OMP_DISPLAY_ENV=verbose
-
-
-  for iter in 1 2 3
-  do
-
-    for K in 15 21 31 63
-    do
-
-      outfile=${OUT_DIR}/kmc3.out
-
-      # canonical
-      logfile=${logdir}/kmc3/kmc3-CANONICAL-k${K}-t${t}-${dataset}.$iter.log
-      if [ ! -f $logfile ] || [ "$(tail -1 $logfile)" != "COMPLETED" ]
-      then
-
-        # -r mem only
-        # -ci1 include kmers of all frequencies
-        # -m16 16GB max (each?)
-        # -b single strand form
-        cmd="${NUMA_CMD} ${KMC_EXEC} -v -k${K} -m512 -fq -ci1 -cs1000000000 -r -t${t} ${datafile} $outfile ${OUT_DIR}"
-        echo "COMMAND (CANONICAL): ${cmd}"
-        echo "LOGFILE: ${logfile}"
-        echo "$cmd" > $logfile
-          
-        eval "($TIME_CMD $cmd >> $logfile 2>&1) >> $logfile 2>&1"
-        echo "COMPLETED" >> $logfile
-        
-        rm ${outfile}*
-      else
-        echo "$logfile exists and COMPLETED.  skipping."
-      fi
-
-    done
-    #K
-
-  done
-  #iter
-
-done
-#t
-
-
-
